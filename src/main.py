@@ -1,9 +1,12 @@
 from sys import argv, stderr
 from .error import had_error
+from .tokenizer import TokenizerContext, StringTokenizer
 
+tokenizer_context = TokenizerContext()
 def parse(code):
-    # TODO
-    return
+    tokens = StringTokenizer(tokenizer_context, code)
+    tokens = tokens.scan_loop()
+    print(tokens)
 
 def execute(parse_result):
     # TODO
@@ -29,7 +32,8 @@ def run_prompt():
         except EOFError:
             break
 
-        run(line)
+        # TODO multi-line tokens in REPL are currently not supported
+        run(line + "\n")
 
 def main():
     if len(argv) > 2:
