@@ -51,9 +51,9 @@ class TokenizerContext:
 
     def on_eof(self):
         if self.block_comment_nesting != 0:
-            error("Unterminated block quote", line=self.ctx.line)
+            error("Unterminated block quote", line=self.line)
         elif self.in_string:
-            error("Unterminated string", line=self.ctx.line)
+            error("Unterminated string", line=self.line)
 
 def is_digit(char: str) -> bool:
     if len(char) != 1: return False
