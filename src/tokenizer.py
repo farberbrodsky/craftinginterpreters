@@ -36,9 +36,24 @@ class Token:
 class TokenizerContext:
     # total line number
     line: int
+    # block comment nesting: >0 if in a block comment
+    block_comment_nesting: int
+    # in a multiline string
+    in_string: bool
+    # multiline string context
+    string_context: str
 
     def __init__(self):
         self.line = 1
+        self.block_comment_nesting = 0
+        self.in_string = False
+        self.string_context = ""
+
+    def on_eof(self):
+        if self.block_comment_nesting != 0:
+            error("Unterminated block quote", line=self.ctx.line)
+        elif self.in_string:
+            error("Unterminated string", line=self.ctx.line)
 
 def is_digit(char: str) -> bool:
     if len(char) != 1: return False
@@ -105,21 +120,34 @@ class StringTokenizer:
         self.tokens.append(Token(token_type, text, literal, self.ctx.line))
 
     def scan_string(self):
+        # create context
+        was_in_string = self.ctx.in_string
+        if not self.ctx.in_string:
+            self.ctx.in_string = True
+            self.ctx.string_context = ""
+
+        # advance until " or EOF
         while self.peek() not in ['"', "EOF"]:
             if self.peek() == "\n":
                 self.ctx.line += 1
             self.getc()
 
+        # Trim surrounding quotes
+        value = self.code[(self.start + (0 if was_in_string else 1)): self.position]
+        self.ctx.string_context += value
+        print("value", repr(value), repr(self.code))
+
+        # in case of EOF: keep context
         if self.peek() == "EOF":
-            error("Unterminated string", line=self.ctx.line)
             return
 
         # Ignore closing "
         self.getc()
 
-        # Trim surrounding quotes
-        value = self.code[(self.start + 1): (self.position - 1)]
-        self.add_token(TokenType.STRING, value)
+        self.add_token(TokenType.STRING, self.ctx.string_context)
+        # Reset context
+        self.ctx.in_string = False
+        self.ctx.string_context = ""
 
     def scan_number(self):
         while is_digit(self.peek()):
@@ -144,34 +172,26 @@ class StringTokenizer:
             self.add_token(TokenType.IDENTIFIER)
 
     def block_comment(self):
-        # ignore the *
-        self.getc()
-        # support nesting!
-        block_quote_nesting = 1
-
         # We need one character of history
-        def fail_on_eof():
-            if self.peek() == "EOF":
-                error("Unterminated block quote", line=self.ctx.line)
-                return True
-            return False
+        def is_pre_eof():
+            return self.peek() == "EOF"
 
-        if fail_on_eof(): return
+        if is_pre_eof(): return
         prev_char = self.getc()
 
-        while block_quote_nesting > 0:
+        while self.ctx.block_comment_nesting > 0:
             # There shouldn't be an EOF before the block quote ends
-            if fail_on_eof(): return
+            if is_pre_eof(): return
             char = self.getc()
 
             if prev_char == "/" and char == "*":
                 # /* - increase nesting
-                block_quote_nesting += 1
+                self.ctx.block_comment_nesting += 1
                 # this character has been consumed - otherwise we'd have /*/
                 char = ""
             elif prev_char == "*" and char == "/":
                 # */ - decrease nesting
-                block_quote_nesting -= 1
+                self.ctx.block_comment_nesting -= 1
                 # this character has been consumed - otherwise we'd have */*
                 char = ""
 
@@ -180,6 +200,15 @@ class StringTokenizer:
     def scan_token(self):
         # mark token start
         self.start = self.position
+
+        if self.ctx.block_comment_nesting > 0:
+            # still in a block comment
+            self.block_comment()
+            return
+        elif self.ctx.in_string:
+            # still in a string
+            self.scan_string()
+            return
 
         c = self.getc()
         if c == "(":
@@ -228,6 +257,10 @@ class StringTokenizer:
                 while self.peek() not in ["EOF", "\n"]:
                     self.getc()
             elif self.match("*"):
+                # ignore the *
+                self.getc()
+                # support nesting!
+                self.ctx.block_comment_nesting = 1
                 # block comment is complicated enough for a function
                 self.block_comment()
             else:

@@ -24,15 +24,17 @@ def run_file(path):
     with open(path, "r") as file:
         code = file.read()
     run(code)
+    tokenizer_context.on_eof()
 
 def run_prompt():
     while True:
         try:
             line = input("> ")
         except EOFError:
+            tokenizer_context.on_eof()
             break
 
-        # TODO multi-line tokens in REPL are currently not supported
+        # TODO multi-line tokens in REPL are currently supported through a hack
         run(line + "\n")
 
 def main():
