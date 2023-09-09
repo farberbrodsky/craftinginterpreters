@@ -1,12 +1,15 @@
 from sys import argv, stderr
 from .error import had_error
 from .tokenizer import TokenizerContext, StringTokenizer
+from .parser import parse_token_list, format_expresssion
 
 tokenizer_context = TokenizerContext()
 def parse(code):
     tokens = StringTokenizer(tokenizer_context, code)
     tokens = tokens.scan_loop()
-    print(tokens)
+    print("Tokens", tokens)
+    expr = parse_token_list(tokens)
+    print("Expr", format_expresssion(expr))
 
 def execute(parse_result):
     # TODO

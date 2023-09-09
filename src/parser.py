@@ -1,6 +1,7 @@
 from typing import List, Literal
 from .tokenizer import Token, TokenType
 from .ast import *
+from .error import had_error
 
 class TokenStream:
     _tokens: List[Token]
@@ -9,6 +10,9 @@ class TokenStream:
     def __init__(self, tokens: List[Token]):
         self._tokens = tokens
         self._pos = 0
+
+    def __repr__(self):
+        return f"TokenStream(pos={self._pos}, {repr(self._tokens)})"
 
     # have reached end
     def reached_end(self):
@@ -52,7 +56,7 @@ def left_associative_binary(next_precedence, *token_types: TokenType):
     def generated_function(token_stream: TokenStream) -> Expr:
         expr = next_precedence(token_stream)
         while op_token := token_stream.match(*token_types):
-            right = parse_term(token_stream)
+            right = next_precedence(token_stream)
             expr = BinaryExpr(expr, op_token, right)
 
         return expr
@@ -69,7 +73,7 @@ def parse_primary(token_stream: TokenStream) -> Expr:
     elif op_token := token_stream.match(TokenType.NUMBER, TokenType.STRING):
         return LiteralExpr(op_token.literal)
     elif token_stream.match(TokenType.LEFT_PAREN):
-        expr = parse_expression(token_stream)
+        expr = parse_expression_top(token_stream)
         token_stream.consume(TokenType.RIGHT_PAREN)
         return GroupingExpr(expr)
     elif token_stream.reached_end():
@@ -77,6 +81,7 @@ def parse_primary(token_stream: TokenStream) -> Expr:
         raise EOFError()
     else:
         # generate ErrorExpression
+        had_error = True
         return ErrorExpr(token_stream.next())
 
 def parse_unary(token_stream: TokenStream) -> Expr:
@@ -91,7 +96,29 @@ parse_factor     = left_associative_binary(parse_unary     , TokenType.SLASH, To
 parse_term       = left_associative_binary(parse_factor    , TokenType.MINUS, TokenType.PLUS)
 parse_comparison = left_associative_binary(parse_term      , TokenType.GREATER, TokenType.GREATER_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL)
 parse_equality   = left_associative_binary(parse_comparison, TokenType.BANG_EQUAL, TokenType.EQUAL_EQUAL)
+parse_expression_top = parse_equality
 
-def parse_expression(token_stream: TokenStream) -> Expr:
-    return parse_equality(token_stream)
+def parse_token_list(token_list: List[Token]) -> Expr:
+    return parse_equality(TokenStream(token_list))
+
+def format_expresssion(format_expr: Expr) -> str:
+    class FormatVisitor(VisitorInterface):
+        def accept_binary_expr(self, expr: BinaryExpr):
+            return parenthesize(expr.operator.lexeme, expr.left, expr.right)
+        def accept_grouping_expr(self, expr: GroupingExpr):
+            return parenthesize("group", expr.expression)
+        def accept_literal_expr(self, expr: LiteralExpr):
+            return str(expr.value)
+        def accept_unary_expr(self, expr: UnaryExpr):
+            return parenthesize(expr.operator.lexeme, expr.right)
+        def accept_error_expr(self, expr: ErrorExpr):
+            return f"(ERROR {repr(expr.unrecognized)})"
+
+    def parenthesize(name: str, *args: Expr) -> str:
+        result = f"({name} "
+        result += " ".join(arg.accept(FormatVisitor()) for arg in args)
+        result += ")"
+        return result
+
+    return format_expr.accept(FormatVisitor())
 
