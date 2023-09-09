@@ -6,10 +6,11 @@ args = parser.parse_args()
 filename = args.filename
 
 expr_classes = [
-    ("Binary", (("Expr", "left"), ("Token", "operator"), ("Expr", "right"))),
-    ("Grouping", (("Expr", "expression"),)),
-    ("Literal", (("object", "value"),)),
-    ("Unary", (("Token", "operator"), ("Expr", "right"))),
+    ("BinaryExpr",   (("Expr", "left"), ("Token", "operator"), ("Expr", "right")),),
+    ("GroupingExpr", (("Expr", "expression"),),                                   ),
+    ("LiteralExpr",  (("object", "value"),),                                      ),
+    ("UnaryExpr",    (("Token", "operator"), ("Expr", "right")),                  ),
+    ("ErrorExpr",    (("Token", "unrecognized"),),                                ),
 ]
 
 def camel_case(s):
