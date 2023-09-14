@@ -1,7 +1,16 @@
 from typing import List, Literal
 from .tokenizer import Token, TokenType
+from .error import error
 from .ast import *
-from .error import had_error
+
+class UnrecognizedTokenError(Exception):
+    token_error: Token
+    token_error_msg: str
+
+    def __init__(self, token):
+        self.token_error = token
+        self.token_error_msg = f"Parsing error, unrecognized token: {repr(token)}"
+        super().__init__(self.token_error_msg)
 
 class TokenStream:
     _tokens: List[Token]
@@ -80,9 +89,8 @@ def parse_primary(token_stream: TokenStream) -> Expr:
         # expected to find something
         raise EOFError()
     else:
-        # generate ErrorExpression
-        had_error = True
-        return ErrorExpr(token_stream.next())
+        # invalid token
+        raise UnrecognizedTokenError(token_stream.next())
 
 def parse_unary(token_stream: TokenStream) -> Expr:
     if op_token := token_stream.match(TokenType.BANG, TokenType.MINUS):
@@ -98,9 +106,6 @@ parse_comparison = left_associative_binary(parse_term      , TokenType.GREATER, 
 parse_equality   = left_associative_binary(parse_comparison, TokenType.BANG_EQUAL, TokenType.EQUAL_EQUAL)
 parse_expression_top = parse_equality
 
-def parse_token_list(token_list: List[Token]) -> Expr:
-    return parse_equality(TokenStream(token_list))
-
 def format_expresssion(format_expr: Expr) -> str:
     class FormatVisitor(VisitorInterface):
         def accept_binary_expr(self, expr: BinaryExpr):
@@ -111,8 +116,6 @@ def format_expresssion(format_expr: Expr) -> str:
             return str(expr.value)
         def accept_unary_expr(self, expr: UnaryExpr):
             return parenthesize(expr.operator.lexeme, expr.right)
-        def accept_error_expr(self, expr: ErrorExpr):
-            return f"(ERROR {repr(expr.unrecognized)})"
 
     def parenthesize(name: str, *args: Expr) -> str:
         result = f"({name} "
@@ -121,4 +124,18 @@ def format_expresssion(format_expr: Expr) -> str:
         return result
 
     return format_expr.accept(FormatVisitor())
+
+# None is returned only on a real and registered parsing error
+# EOF is recoverable if it's interactive
+def parse_expression(token_stream: TokenStream) -> Expr | EOFError | None:
+    try:
+        return parse_equality(token_stream)
+    except EOFError as e:
+        return e
+    except UnrecognizedTokenError as e:
+        error(e.token_error_msg, e.token_error.line)
+        return None
+
+def parse_token_list(token_list: List[Token]) -> Expr | EOFError | None:
+    return parse_expression(TokenStream(token_list))
 

@@ -10,7 +10,6 @@ expr_classes = [
     ("GroupingExpr", (("Expr", "expression"),),                                   ),
     ("LiteralExpr",  (("object", "value"),),                                      ),
     ("UnaryExpr",    (("Token", "operator"), ("Expr", "right")),                  ),
-    ("ErrorExpr",    (("Token", "unrecognized"),),                                ),
 ]
 
 def camel_case(s):
