@@ -49,11 +49,22 @@ class TokenizerContext:
         self.in_string = False
         self.string_context = ""
 
+    def __repr__(self):
+        return f"TokenizerContext(line={self.line}, block_comment_nesting={self.block_comment_nesting}, in_string={self.in_string}, string_context={self.string_context})"
+
     def on_eof(self):
         if self.block_comment_nesting != 0:
             error("Unterminated block quote", line=self.line)
         elif self.in_string:
             error("Unterminated string", line=self.line)
+
+    def copy(self):
+        clone = TokenizerContext()
+        clone.line = self.line
+        clone.block_comment_nesting = self.block_comment_nesting
+        clone.in_string = self.in_string
+        clone.string_context = self.string_context
+        return clone
 
 def is_digit(char: str) -> bool:
     if len(char) != 1: return False
@@ -103,9 +114,18 @@ class StringTokenizer:
         self.position = 0
         self.tokens = []
 
+    def __repr__(self):
+        return f"StringTokenizer({repr(self.ctx)}, {self.code}, {self.start}, {self.position})"
+
     def getc(self) -> str:
         self.position += 1
-        return self.code[self.position - 1]
+        c = self.code[self.position - 1]
+
+        if c == "\n":
+            # line number counting
+            self.ctx.line += 1
+
+        return c
 
     def peek(self, count=0) -> str:
         if (self.position + count) >= len(self.code):
@@ -128,14 +148,11 @@ class StringTokenizer:
 
         # advance until " or EOF
         while self.peek() not in ['"', "EOF"]:
-            if self.peek() == "\n":
-                self.ctx.line += 1
             self.getc()
 
         # Trim surrounding quotes
         value = self.code[(self.start + (0 if was_in_string else 1)): self.position]
         self.ctx.string_context += value
-        print("value", repr(value), repr(self.code))
 
         # in case of EOF: keep context
         if self.peek() == "EOF":
@@ -269,8 +286,8 @@ class StringTokenizer:
             # ignore whitespace - no token
             pass
         elif c == "\n":
-            # advance line number
-            self.ctx.line += 1
+            # line number advanced by getc
+            pass
         elif c == '"':
             self.scan_string()
         elif is_digit(c):

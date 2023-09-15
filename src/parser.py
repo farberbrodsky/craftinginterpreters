@@ -25,15 +25,14 @@ class TokenStream:
 
     # have reached end
     def reached_end(self):
-        return self._pos > len(self._tokens)
+        return self._pos >= len(self._tokens)
 
     # get next token or EOFError
     def next(self) -> Token:
-        self._pos += 1
-
         if self.reached_end():
             raise EOFError()
 
+        self._pos += 1
         return self._tokens[self._pos - 1]
 
     # check the next token's type
@@ -107,7 +106,7 @@ parse_equality   = left_associative_binary(parse_comparison, TokenType.BANG_EQUA
 parse_expression_top = parse_equality
 
 def format_expresssion(format_expr: Expr) -> str:
-    class FormatVisitor(VisitorInterface):
+    class FormatVisitor(ExprVisitorInterface):
         def accept_binary_expr(self, expr: BinaryExpr):
             return parenthesize(expr.operator.lexeme, expr.left, expr.right)
         def accept_grouping_expr(self, expr: GroupingExpr):
@@ -125,17 +124,35 @@ def format_expresssion(format_expr: Expr) -> str:
 
     return format_expr.accept(FormatVisitor())
 
-# None is returned only on a real and registered parsing error
-# EOF is recoverable if it's interactive
-def parse_expression(token_stream: TokenStream) -> Expr | EOFError | None:
+
+# Statement parsing
+def parse_print_statement(token_stream: TokenStream) -> Stmt:
+    value = parse_expression_top(token_stream)
+    token_stream.consume(TokenType.SEMICOLON)
+    return PrintStmt(value)
+
+def parse_expression_statement(token_stream: TokenStream) -> Stmt:
+    value = parse_expression_top(token_stream)
+    token_stream.consume(TokenType.SEMICOLON)
+    return ExpressionStmt(value)
+
+def parse_statement(token_stream: TokenStream) -> Stmt:
+    if token_stream.match(TokenType.PRINT):
+        return parse_print_statement(token_stream)
+    else:
+        return parse_expression_statement(token_stream)
+
+def parse_token_list(token_list: List[Token]) -> list[Stmt] | EOFError | None:
+    stmts: list[Stmt] = []
     try:
-        return parse_equality(token_stream)
+        stream = TokenStream(token_list)
+        while not stream.reached_end():
+            stmts.append(parse_statement(stream))
+
     except EOFError as e:
         return e
     except UnrecognizedTokenError as e:
         error(e.token_error_msg, e.token_error.line)
         return None
 
-def parse_token_list(token_list: List[Token]) -> Expr | EOFError | None:
-    return parse_expression(TokenStream(token_list))
-
+    return stmts
